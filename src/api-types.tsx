@@ -93,7 +93,7 @@ interface ValidityPeriod {
   isNow: boolean;
 }
 
-interface Journey {
+export interface Journey {
   startDateTime: string;
   duration: number;
   arrivalDateTime: string;

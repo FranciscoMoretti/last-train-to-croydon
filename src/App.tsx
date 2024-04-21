@@ -1,25 +1,8 @@
-import { useEffect, useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
-import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
-import { JourneyResponse } from "./api-types";
-import { HotkeysProvider } from "@blueprintjs/core";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { Journey, JourneyResponse } from "./api-types";
 import { Column, Table2, Cell } from "@blueprintjs/table";
-
-export type CellLookup = (rowIndex: number, columnIndex: number) => any;
-
-export type SortCallback = (
-  columnIndex: number,
-  comparator: (a: any, b: any) => number
-) => void;
-
-export interface SortableColumn {
-  getColumn(
-    getCellData: CellLookup,
-    sortColumn: SortCallback
-  ): React.JSX.Element;
-}
 
 function getJourneys(
   from: string,
@@ -32,24 +15,18 @@ function getJourneys(
 }
 
 function App() {
-  const [count, setCount] = useState(0);
-  const from = "1004756";
+  const [lastTrain, setLastTrain] = useState("");
+  const from = "1004756"; // London Bridge
   const to = "1001089"; // East Croydon
+  const now = new Date();
 
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetching,
-    isFetchingNextPage,
-    error,
-  } = useInfiniteQuery({
+  const { data, fetchNextPage, error } = useInfiniteQuery({
     queryKey: ["journeys"],
-    queryFn: async ({ pageParam }) => await getJourneys(from, to, pageParam),
-    initialPageParam: "2000",
-    getNextPageParam: (lastPage, allPages) => {
+    queryFn: async ({ pageParam }) =>
+      await getJourneys(from, to, pageParam),
+    initialPageParam: String(now.getHours() * 100 + now.getMinutes()),
+    getNextPageParam: (lastPage) => {
       // Return next page number or null if there are no more hours
-      const nextPageIndex = allPages.length;
       const lastJourney = lastPage.journeys[lastPage.journeys.length - 1];
       const lastStartDate = new Date(lastJourney.startDateTime);
 
@@ -62,7 +39,11 @@ function App() {
         : null;
     },
   });
-  const journeys = data ? data.pages.flatMap((page) => page.journeys) : [];
+  const journeys = useMemo(() => {
+    return data
+      ? data.pages.flatMap((page) => (page as { journeys: Journey[] }).journeys)
+      : [];
+  }, [data]);
 
   useEffect(() => {
     if (journeys.length) {
@@ -71,62 +52,77 @@ function App() {
         new Date().getDay()
       ) {
         fetchNextPage();
+      } else {
+        if (!lastTrain) {
+          const lastJourney = journeys
+            .reverse()
+            .find(
+              (journey) =>
+                new Date(journey.startDateTime).getDay() == new Date().getDay()
+            );
+          if (lastJourney) {
+            const starTime = new Date(lastJourney.startDateTime);
+            setLastTrain(`${starTime.getHours()}:${starTime.getMinutes()}`);
+          }
+        }
       }
     }
-  }, [journeys, fetchNextPage]);
+  }, [journeys, fetchNextPage, lastTrain]);
 
   if (!data) return "Loading...";
   if (error) return "An error has occurred";
 
-  console.log(journeys);
-
   return (
-    <>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "start",
+        textAlign: "start",
+      }}
+    >
       <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+        <h1
+          style={{
+            fontSize: "2rem",
+            fontWeight: "semibold",
+          }}
+        >
+          London Bridge to East Croydon
+        </h1>
+        <p
+          style={{
+            fontSize: "4rem",
+            fontWeight: "bold",
+          }}
+        >{`Last Train: ${lastTrain ? lastTrain : "..."}`}</p>
       </div>
-      <HotkeysProvider>
-        <Table2 numRows={journeys.length}>
-          <Column
-            name="Depart time"
-            cellRenderer={(rowIdx) => (
-              <Cell>
-                {new Date(journeys[rowIdx].startDateTime).toTimeString()}
-              </Cell>
-            )}
-          />
-          <Column
-            name="Arrival Time"
-            cellRenderer={(rowIdx) => (
-              <Cell>
-                {new Date(journeys[rowIdx].arrivalDateTime).toTimeString()}
-              </Cell>
-            )}
-          />
-          <Column
-            name="Duration"
-            cellRenderer={(rowIdx) => (
-              <Cell>{`${journeys[rowIdx].duration} min`}</Cell>
-            )}
-          />
-        </Table2>
-      </HotkeysProvider>
-      {/* <button
-        onClick={() => fetchNextPage()}
-        disabled={!hasNextPage || isFetchingNextPage}
-      >
-        {isFetchingNextPage
-          ? "Loading more..."
-          : hasNextPage
-          ? "Load More"
-          : "Nothing more to load"}
-      </button> */}
-    </>
+      <h2>Next trains</h2>
+      <Table2 numRows={journeys.length}>
+        <Column
+          name="Depart time"
+          cellRenderer={(rowIdx) => (
+            <Cell>
+              {new Date(journeys[rowIdx].startDateTime).toTimeString()}
+            </Cell>
+          )}
+        />
+        <Column
+          name="Arrival Time"
+          cellRenderer={(rowIdx) => (
+            <Cell>
+              {new Date(journeys[rowIdx].arrivalDateTime).toTimeString()}
+            </Cell>
+          )}
+        />
+        <Column
+          name="Duration"
+          cellRenderer={(rowIdx) => (
+            <Cell>{`${journeys[rowIdx].duration} min`}</Cell>
+          )}
+        />
+      </Table2>
+    </div>
   );
 }
 
