@@ -22,8 +22,7 @@ function App() {
 
   const { data, fetchNextPage, error } = useInfiniteQuery({
     queryKey: ["journeys"],
-    queryFn: async ({ pageParam }) =>
-      await getJourneys(from, to, pageParam),
+    queryFn: async ({ pageParam }) => await getJourneys(from, to, pageParam),
     initialPageParam: String(now.getHours() * 100 + now.getMinutes()),
     getNextPageParam: (lastPage) => {
       // Return next page number or null if there are no more hours
@@ -55,6 +54,7 @@ function App() {
       } else {
         if (!lastTrain) {
           const lastJourney = journeys
+            .slice()
             .reverse()
             .find(
               (journey) =>
@@ -62,7 +62,7 @@ function App() {
             );
           if (lastJourney) {
             const starTime = new Date(lastJourney.startDateTime);
-            setLastTrain(`${starTime.getHours()}:${starTime.getMinutes()}`);
+            setLastTrain(dateToHHmm(starTime));
           }
         }
       }
@@ -102,16 +102,14 @@ function App() {
         <Column
           name="Depart time"
           cellRenderer={(rowIdx) => (
-            <Cell>
-              {new Date(journeys[rowIdx].startDateTime).toTimeString()}
-            </Cell>
+            <Cell>{dateToHHmm(new Date(journeys[rowIdx].startDateTime))}</Cell>
           )}
         />
         <Column
           name="Arrival Time"
           cellRenderer={(rowIdx) => (
             <Cell>
-              {new Date(journeys[rowIdx].arrivalDateTime).toTimeString()}
+              {dateToHHmm(new Date(journeys[rowIdx].arrivalDateTime))}
             </Cell>
           )}
         />
@@ -127,3 +125,6 @@ function App() {
 }
 
 export default App;
+function dateToHHmm(startTime: Date) {
+  return `${startTime.toTimeString().split(" ")[0]}`;
+}
