@@ -1,11 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
-import { useQueries } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
 import { JourneyResponse } from "./api-types";
 import { HotkeysProvider } from "@blueprintjs/core";
 import { Column, Table2, Cell } from "@blueprintjs/table";
+
+export type CellLookup = (rowIndex: number, columnIndex: number) => any;
+
+export type SortCallback = (
+  columnIndex: number,
+  comparator: (a: any, b: any) => number
+) => void;
+
+export interface SortableColumn {
+  getColumn(
+    getCellData: CellLookup,
+    sortColumn: SortCallback
+  ): React.JSX.Element;
+}
 
 function getJourneys(
   from: string,
@@ -17,25 +31,53 @@ function getJourneys(
   ).then((res) => res.json());
 }
 
-const HOURS = ["2000", "2100", "2200", "2300"];
-
 function App() {
   const [count, setCount] = useState(0);
   const from = "1004756";
   const to = "1001089"; // East Croydon
 
-  const queries = useQueries({
-    queries: HOURS.map((hour) => ({
-      queryKey: [`journeys-${hour}`],
-      queryFn: () => getJourneys(from, to, hour),
-    })),
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    error,
+  } = useInfiniteQuery({
+    queryKey: ["journeys"],
+    queryFn: async ({ pageParam }) => await getJourneys(from, to, pageParam),
+    initialPageParam: "2000",
+    getNextPageParam: (lastPage, allPages) => {
+      // Return next page number or null if there are no more hours
+      const nextPageIndex = allPages.length;
+      const lastJourney = lastPage.journeys[lastPage.journeys.length - 1];
+      const lastStartDate = new Date(lastJourney.startDateTime);
+
+      return lastStartDate.getDay() == new Date().getDay()
+        ? (
+            lastStartDate.getHours() * 100 +
+            lastStartDate.getMinutes() +
+            1
+          ).toString()
+        : null;
+    },
   });
+  const journeys = data ? data.pages.flatMap((page) => page.journeys) : [];
 
-  if (queries.some((result) => result.isLoading)) return "Loading...";
+  useEffect(() => {
+    if (journeys.length) {
+      if (
+        new Date(journeys[journeys.length - 1].startDateTime).getDay() ==
+        new Date().getDay()
+      ) {
+        fetchNextPage();
+      }
+    }
+  }, [journeys, fetchNextPage]);
 
-  if (queries.some((result) => result.error)) return "An error has occurred";
+  if (!data) return "Loading...";
+  if (error) return "An error has occurred";
 
-  const journeys = queries.flatMap((result) => result.data?.journeys);
   console.log(journeys);
 
   return (
@@ -74,18 +116,16 @@ function App() {
           />
         </Table2>
       </HotkeysProvider>
-      ,<h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
+      {/* <button
+        onClick={() => fetchNextPage()}
+        disabled={!hasNextPage || isFetchingNextPage}
+      >
+        {isFetchingNextPage
+          ? "Loading more..."
+          : hasNextPage
+          ? "Load More"
+          : "Nothing more to load"}
+      </button> */}
     </>
   );
 }
